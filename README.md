@@ -11,11 +11,13 @@ Unit testing framework for Logos modules. Supports mocking calls to other module
 - **JSON output** — `--json` flag for CI and agent consumption
 - **Test filtering** — `--filter <pattern>` to run a subset of tests
 - **10-line CMake** — `logos_test()` replaces ~150 lines of boilerplate
-- **Nix integration** — `mkLogosModuleTests` for zero-config builds
+- **Zero-config Nix** — auto-detected by `logos-module-builder`
 
 ## Quick Start
 
-### 1. Write tests
+If your module uses `logos-module-builder` (which all standard Logos modules should), the test framework is **already available**. No extra flake inputs needed.
+
+### 1. Add test files to your module
 
 ```cpp
 // tests/test_my_feature.cpp
@@ -41,9 +43,8 @@ LOGOS_TEST(feature_returns_expected_value) {
 LOGOS_TEST_MAIN()
 ```
 
-### 2. CMake (tests/CMakeLists.txt)
-
 ```cmake
+# tests/CMakeLists.txt
 cmake_minimum_required(VERSION 3.14)
 project(MyModuleTests LANGUAGES CXX)
 
@@ -58,13 +59,58 @@ logos_test(
 )
 ```
 
-### 3. Run
+### 2. Run
 
 ```bash
-./my_module_tests                    # colored output
-./my_module_tests --json             # machine-readable
-./my_module_tests --filter feature   # run matching tests
+nix build .#unit-tests -L
 ```
+
+That's it. `logos-module-builder` auto-detects `tests/CMakeLists.txt` and wires up the test derivation.
+
+### How it works with logos-module-builder
+
+A typical module `flake.nix` already has everything needed:
+
+```nix
+{
+  inputs = {
+    logos-module-builder.url = "github:logos-co/logos-module-builder";
+  };
+
+  outputs = inputs@{ logos-module-builder, ... }:
+    logos-module-builder.lib.mkLogosModule {
+      src = ./.;
+      configFile = ./metadata.json;
+      flakeInputs = inputs;
+    };
+}
+```
+
+If `tests/CMakeLists.txt` exists, a `unit-tests` package and `checks.<system>.unit-tests` check are generated automatically.
+
+For modules that need C-library mocking or other customization, pass `tests` explicitly:
+
+```nix
+logos-module-builder.lib.mkLogosModule {
+  src = ./.;
+  configFile = ./metadata.json;
+  flakeInputs = inputs;
+  tests = {
+    dir = ./tests;
+    mockCLibs = ["gowalletsdk"];  # mock this C library at link time
+  };
+};
+```
+
+Available `tests` options:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `dir` | (required) | Path to the tests directory |
+| `mockCLibs` | `[]` | C libraries to mock at link time |
+| `preConfigure` | `""` | Shell commands to run before cmake |
+| `extraBuildInputs` | `[]` | Additional nix packages |
+| `extraCmakeFlags` | `[]` | Extra flags passed to cmake |
 
 ## Mocking Other Modules
 
@@ -176,9 +222,19 @@ LOGOS_TEST(method_emits_event) {
  ── Results: 2 passed, 1 failed (6ms) ──────
 ```
 
-## Nix Integration
+## CLI Options
 
-### In module's flake.nix
+```
+./my_module_tests [options]
+  --filter <pattern>  Run only tests whose name contains pattern
+  --json              Output results as JSON (for CI/agents)
+  --no-color          Disable colored output
+  --help              Show help
+```
+
+## Manual Setup (without logos-module-builder)
+
+If your project doesn't use `logos-module-builder`, you can use the framework directly:
 
 ```nix
 checks.${system}.unit-tests = logos-test-framework.lib.mkLogosModuleTests {
@@ -189,28 +245,4 @@ checks.${system}.unit-tests = logos-test-framework.lib.mkLogosModuleTests {
   logosSdk = logos-cpp-sdk.packages.${system}.default;
   testFramework = logos-test-framework.packages.${system}.default;
 };
-```
-
-### Via logos-module-builder (ultimate goal)
-
-```nix
-logos-module-builder.lib.mkLogosModule {
-  src = ./.;
-  configFile = ./metadata.json;
-  flakeInputs = inputs;
-  tests = {
-    dir = ./tests;
-    mockCLibs = ["gowalletsdk"];
-  };
-};
-```
-
-## CLI Options
-
-```
-./my_module_tests [options]
-  --filter <pattern>  Run only tests whose name contains pattern
-  --json              Output results as JSON (for CI/agents)
-  --no-color          Disable colored output
-  --help              Show help
 ```
