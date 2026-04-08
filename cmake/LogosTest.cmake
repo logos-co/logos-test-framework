@@ -22,7 +22,11 @@
 #           ../generated_code
 #   )
 
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.15)
+
+# Load before function(logos_test): tests/CMakeLists.txt calls logos_find_go_static_archive
+# after include(LogosTest); helpers must exist at include() return (see LogosTestGoStatic.cmake).
+include(${CMAKE_CURRENT_LIST_DIR}/LogosTestGoStatic.cmake)
 
 #[=======================================================================[.rst:
 logos_test
@@ -41,12 +45,15 @@ Optional:
   GENERATED_SOURCES  - Generated code files (logos_provider_dispatch.cpp, etc.)
   GENERATED_DIR      - Directory containing generated code (logos_sdk.cpp, etc.)
   EXTRA_LINK_LIBS    - Additional libraries to link
+  LINK_GO_STATIC_ARCHIVE - Absolute path to a Go c-archive (.a); links with
+                           whole-archive / -force_load (see LogosModule.cmake)
 #]=======================================================================]
 function(logos_test)
-    cmake_parse_arguments(LT ""
-        "NAME;GENERATED_DIR"
-        "MODULE_SOURCES;TEST_SOURCES;MOCK_C_SOURCES;EXTRA_INCLUDES;GENERATED_SOURCES;EXTRA_LINK_LIBS"
-        ${ARGN})
+    # PARSE_ARGV: CMake 3.31+ can mis-parse ${ARGN} for functions with no named parameters,
+    # merging all args into LT_NAME. Read from ARGV starting at index 0 instead.
+    cmake_parse_arguments(PARSE_ARGV 0 LT ""
+        "NAME;GENERATED_DIR;LINK_GO_STATIC_ARCHIVE"
+        "MODULE_SOURCES;TEST_SOURCES;MOCK_C_SOURCES;EXTRA_INCLUDES;GENERATED_SOURCES;EXTRA_LINK_LIBS")
 
     if(NOT LT_NAME)
         message(FATAL_ERROR "logos_test: NAME is required")
@@ -211,6 +218,10 @@ function(logos_test)
     foreach(lib ${LT_EXTRA_LINK_LIBS})
         target_link_libraries(${LT_NAME} PRIVATE ${lib})
     endforeach()
+
+    if(LT_LINK_GO_STATIC_ARCHIVE)
+        logos_target_link_go_c_archive(${LT_NAME} "${LT_LINK_GO_STATIC_ARCHIVE}")
+    endif()
 
     # ── CTest ────────────────────────────────────────────────────────────────
 
