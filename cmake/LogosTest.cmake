@@ -207,11 +207,16 @@ function(logos_test)
         Qt${QT_VERSION_MAJOR}::RemoteObjects
     )
 
-    # In installed layout, link against pre-built SDK library
+    # In installed layout, pull the SDK in as a CMake package: the SDK
+    # ships a logos-cpp-sdkConfig.cmake under lib/cmake/logos-cpp-sdk/
+    # whose imported target carries every transitive link dep
+    # (OpenSSL / Boost / nlohmann_json / Qt). One target_link_libraries
+    # call covers what used to take a manual find_library plus
+    # explicit OpenSSL linking.
     if(NOT LOGOS_CPP_SDK_IS_SOURCE)
-        find_library(LOGOS_SDK_LIB logos_sdk
-            PATHS "${LOGOS_CPP_SDK_ROOT}/lib" NO_DEFAULT_PATH REQUIRED)
-        target_link_libraries(${LT_NAME} PRIVATE ${LOGOS_SDK_LIB})
+        find_package(logos-cpp-sdk REQUIRED
+            PATHS "${LOGOS_CPP_SDK_ROOT}" NO_DEFAULT_PATH)
+        target_link_libraries(${LT_NAME} PRIVATE logos-cpp-sdk::logos_sdk)
     endif()
 
     # Extra link libraries
