@@ -3,7 +3,7 @@
 
   inputs = {
     logos-nix.url = "github:logos-co/logos-nix";
-    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk/support-non-local-remote-transports";
+    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
