@@ -237,5 +237,6 @@ private:
 
 #include "logos_test_context.h"
 #include "logos_clib_mock.h"
+#include "logos_test_events.h"
 
 #endif // LOGOS_TEST_H
