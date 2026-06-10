@@ -4,10 +4,22 @@
   inputs = {
     logos-nix.url = "github:logos-co/logos-nix";
     logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
+    logos-protocol = {
+      url = "github:logos-co/logos-protocol";
+      inputs.logos-nix.follows = "logos-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    logos-qt-sdk = {
+      url = "github:logos-co/logos-qt-sdk";
+      inputs.logos-nix.follows = "logos-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.logos-protocol.follows = "logos-protocol";
+      inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    };
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, ... }:
+  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-qt-sdk, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
@@ -57,6 +69,8 @@
       devShells = forAllSystems ({ pkgs, system, ... }:
         let
           logosSdk = logos-cpp-sdk.packages.${system}.default;
+          logosQtSdk = logos-qt-sdk.packages.${system}.default;
+          logosProtocol = logos-protocol.packages.${system}.default;
         in {
           default = pkgs.mkShell {
             nativeBuildInputs = with pkgs; [
@@ -68,9 +82,13 @@
               qt6.qtbase
               qt6.qtremoteobjects
               logosSdk
+              logosQtSdk
+              logosProtocol
             ];
             shellHook = ''
               export LOGOS_CPP_SDK_ROOT="${logosSdk}"
+              export LOGOS_QT_SDK_ROOT="${logosQtSdk}"
+              export LOGOS_PROTOCOL_ROOT="${logosProtocol}"
               export LOGOS_TEST_FRAMEWORK_ROOT="${./.}"
               echo "Logos Test Framework development environment"
             '';

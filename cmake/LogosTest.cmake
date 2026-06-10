@@ -74,7 +74,11 @@ function(logos_test)
         endif()
     endif()
 
-    # ── Locate logos-cpp-sdk ─────────────────────────────────────────────────
+    # ── Locate logos-cpp-sdk / logos-qt-sdk / logos-protocol ─────────────────
+    # Since the qt split the SDK is three roots: the Qt-free base SDK
+    # (logos_module_context.h — logos_api.h moved away), the Qt developer
+    # layer (LogosAPI, provider objects, core/interface.h), and the protocol
+    # layer (transports, consumer core, mock implementations).
 
     if(NOT DEFINED LOGOS_CPP_SDK_ROOT)
         if(DEFINED ENV{LOGOS_CPP_SDK_ROOT})
@@ -84,28 +88,53 @@ function(logos_test)
                                 "Set it via environment or CMake variable.")
         endif()
     endif()
+    if(NOT DEFINED LOGOS_QT_SDK_ROOT)
+        if(DEFINED ENV{LOGOS_QT_SDK_ROOT})
+            set(LOGOS_QT_SDK_ROOT "$ENV{LOGOS_QT_SDK_ROOT}")
+        else()
+            message(FATAL_ERROR "LOGOS_QT_SDK_ROOT not set. "
+                                "Set it via environment or CMake variable.")
+        endif()
+    endif()
+    if(NOT DEFINED LOGOS_PROTOCOL_ROOT)
+        if(DEFINED ENV{LOGOS_PROTOCOL_ROOT})
+            set(LOGOS_PROTOCOL_ROOT "$ENV{LOGOS_PROTOCOL_ROOT}")
+        else()
+            message(FATAL_ERROR "LOGOS_PROTOCOL_ROOT not set. "
+                                "Set it via environment or CMake variable.")
+        endif()
+    endif()
 
-    # Detect source vs installed layout for SDK
-    if(EXISTS "${LOGOS_CPP_SDK_ROOT}/cpp/logos_api.h")
+    # Detect source vs installed layout per root
+    if(EXISTS "${LOGOS_CPP_SDK_ROOT}/cpp/logos_module_context.h")
         set(LOGOS_CPP_SDK_IS_SOURCE TRUE)
         set(SDK_INCLUDE "${LOGOS_CPP_SDK_ROOT}/cpp")
-        set(SDK_MOCK_INCLUDE "${LOGOS_CPP_SDK_ROOT}/cpp/implementations/mock")
     else()
         set(LOGOS_CPP_SDK_IS_SOURCE FALSE)
         set(SDK_INCLUDE "${LOGOS_CPP_SDK_ROOT}/include/cpp")
-        set(SDK_MOCK_INCLUDE "${LOGOS_CPP_SDK_ROOT}/include/cpp/implementations/mock")
     endif()
-
-    # Detect interface.h location (core/interface.h in SDK)
-    if(EXISTS "${LOGOS_CPP_SDK_ROOT}/core/interface.h")
-        set(SDK_CORE_INCLUDE "${LOGOS_CPP_SDK_ROOT}/core")
-    elseif(EXISTS "${LOGOS_CPP_SDK_ROOT}/include/core/interface.h")
-        set(SDK_CORE_INCLUDE "${LOGOS_CPP_SDK_ROOT}/include/core")
+    if(EXISTS "${LOGOS_QT_SDK_ROOT}/cpp/logos_api.h")
+        set(LOGOS_QT_SDK_IS_SOURCE TRUE)
+        set(QT_SDK_INCLUDE "${LOGOS_QT_SDK_ROOT}/cpp")
+        set(SDK_CORE_INCLUDE "${LOGOS_QT_SDK_ROOT}/core")
     else()
-        set(SDK_CORE_INCLUDE "${SDK_INCLUDE}")
+        set(LOGOS_QT_SDK_IS_SOURCE FALSE)
+        set(QT_SDK_INCLUDE "${LOGOS_QT_SDK_ROOT}/include/cpp")
+        set(SDK_CORE_INCLUDE "${LOGOS_QT_SDK_ROOT}/include/core")
     endif()
+    if(EXISTS "${LOGOS_PROTOCOL_ROOT}/cpp/logos_protocol.h")
+        set(PROTOCOL_INCLUDE "${LOGOS_PROTOCOL_ROOT}/cpp")
+        set(PROTOCOL_IMPL_INCLUDE "${LOGOS_PROTOCOL_ROOT}/cpp/implementations")
+    else()
+        set(PROTOCOL_INCLUDE "${LOGOS_PROTOCOL_ROOT}/include")
+        set(PROTOCOL_IMPL_INCLUDE "${LOGOS_PROTOCOL_ROOT}/include/implementations")
+    endif()
+    # Mock transport headers live in logos-protocol since the extraction.
+    set(SDK_MOCK_INCLUDE "${PROTOCOL_IMPL_INCLUDE}/mock")
 
     message(STATUS "[LogosTest] SDK root: ${LOGOS_CPP_SDK_ROOT} (source=${LOGOS_CPP_SDK_IS_SOURCE})")
+    message(STATUS "[LogosTest] Qt SDK root: ${LOGOS_QT_SDK_ROOT}")
+    message(STATUS "[LogosTest] Protocol root: ${LOGOS_PROTOCOL_ROOT}")
     message(STATUS "[LogosTest] Framework root: ${LOGOS_TEST_FRAMEWORK_ROOT}")
 
     # ── Qt ───────────────────────────────────────────────────────────────────
@@ -126,25 +155,16 @@ function(logos_test)
         ${LOGOS_TEST_FRAMEWORK_ROOT}/src/logos_clib_mock.cpp
     )
 
-    # SDK sources (when using source layout — Nix always provides installed layout)
-    if(LOGOS_CPP_SDK_IS_SOURCE)
+    # Qt-SDK sources (when using source layout — Nix always provides installed
+    # layout). The transport/consumer core (types, api_client, token_manager,
+    # mock transports, ...) lives in the logos-protocol LIBRARY and is linked
+    # below instead of compiled in.
+    if(LOGOS_QT_SDK_IS_SOURCE)
         list(APPEND ALL_SOURCES
-            ${SDK_INCLUDE}/logos_types.cpp
-            ${SDK_INCLUDE}/logos_api.cpp
-            ${SDK_INCLUDE}/logos_api_client.cpp
-            ${SDK_INCLUDE}/logos_api_consumer.cpp
-            ${SDK_INCLUDE}/logos_api_provider.cpp
-            ${SDK_INCLUDE}/module_proxy.cpp
-            ${SDK_INCLUDE}/token_manager.cpp
-            ${SDK_INCLUDE}/logos_transport_factory.cpp
-            ${SDK_INCLUDE}/logos_registry_factory.cpp
-            ${SDK_INCLUDE}/logos_provider_object.cpp
-            ${SDK_INCLUDE}/qt_provider_object.cpp
-            ${SDK_INCLUDE}/implementations/qt_local/local_transport.cpp
-            ${SDK_INCLUDE}/implementations/qt_remote/remote_transport.cpp
-            ${SDK_INCLUDE}/implementations/qt_remote/qt_remote_registry.cpp
-            ${SDK_INCLUDE}/implementations/mock/mock_store.cpp
-            ${SDK_INCLUDE}/implementations/mock/mock_transport.cpp
+            ${QT_SDK_INCLUDE}/logos_api.cpp
+            ${QT_SDK_INCLUDE}/logos_api_provider.cpp
+            ${QT_SDK_INCLUDE}/logos_provider_object.cpp
+            ${QT_SDK_INCLUDE}/qt_provider_object.cpp
         )
     endif()
 
@@ -179,12 +199,14 @@ function(logos_test)
         ${CMAKE_CURRENT_BINARY_DIR}
         # Framework headers
         ${LOGOS_TEST_FRAMEWORK_ROOT}/include
-        # SDK headers
+        # SDK headers (base, Qt layer, protocol layer)
         ${SDK_INCLUDE}
+        ${QT_SDK_INCLUDE}
         ${SDK_CORE_INCLUDE}
+        ${PROTOCOL_INCLUDE}
         ${SDK_MOCK_INCLUDE}
-        ${SDK_INCLUDE}/implementations/qt_local
-        ${SDK_INCLUDE}/implementations/qt_remote
+        ${PROTOCOL_IMPL_INCLUDE}/qt_local
+        ${PROTOCOL_IMPL_INCLUDE}/qt_remote
     )
 
     # Generated code include
@@ -207,16 +229,36 @@ function(logos_test)
         Qt${QT_VERSION_MAJOR}::RemoteObjects
     )
 
-    # In installed layout, pull the SDK in as a CMake package: the SDK
-    # ships a logos-cpp-sdkConfig.cmake under lib/cmake/logos-cpp-sdk/
-    # whose imported target carries every transitive link dep
-    # (OpenSSL / Boost / nlohmann_json / Qt). One target_link_libraries
-    # call covers what used to take a manual find_library plus
-    # explicit OpenSSL linking.
-    if(NOT LOGOS_CPP_SDK_IS_SOURCE)
-        find_package(logos-cpp-sdk REQUIRED
-            PATHS "${LOGOS_CPP_SDK_ROOT}" NO_DEFAULT_PATH)
-        target_link_libraries(${LT_NAME} PRIVATE logos-cpp-sdk::logos_sdk)
+    # Link the Qt SDK via its exported CMake target so the consumer inherits
+    # the full transitive link interface (logos-protocol, and through it
+    # OpenSSL / Boost::system / nlohmann_json). A bare archive on the link
+    # line would leave Boost.Asio TLS symbols undefined.
+    if(NOT LOGOS_QT_SDK_IS_SOURCE)
+        find_package(logos-protocol REQUIRED CONFIG
+            PATHS "${LOGOS_PROTOCOL_ROOT}/lib/cmake/logos-protocol"
+            NO_DEFAULT_PATH)
+        find_package(logos-qt-sdk REQUIRED CONFIG
+            PATHS "${LOGOS_QT_SDK_ROOT}/lib/cmake/logos-qt-sdk"
+            NO_DEFAULT_PATH)
+        target_link_libraries(${LT_NAME} PRIVATE logos-qt-sdk::logos_qt_sdk)
+    else()
+        # Source-layout qt-sdk compiled in above; link the protocol library.
+        if(NOT TARGET logos_protocol)
+            add_subdirectory("${LOGOS_PROTOCOL_ROOT}/cpp"
+                             "${CMAKE_BINARY_DIR}/logos-protocol-build")
+        endif()
+        target_link_libraries(${LT_NAME} PRIVATE logos_protocol)
+    endif()
+
+    # Qt-free base SDK headers (nlohmann include path for logos_json.h etc.)
+    if(EXISTS "${LOGOS_CPP_SDK_ROOT}/lib/cmake/logos-cpp-sdk")
+        find_package(logos-cpp-sdk REQUIRED CONFIG
+            PATHS "${LOGOS_CPP_SDK_ROOT}/lib/cmake/logos-cpp-sdk"
+            NO_DEFAULT_PATH)
+        target_link_libraries(${LT_NAME} PRIVATE logos-cpp-sdk::logos_headers)
+    else()
+        find_package(nlohmann_json REQUIRED)
+        target_link_libraries(${LT_NAME} PRIVATE nlohmann_json::nlohmann_json)
     endif()
 
     # Extra link libraries
