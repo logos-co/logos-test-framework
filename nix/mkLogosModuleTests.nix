@@ -23,6 +23,8 @@
 , testDir
 , configFile ? null
 , logosSdk
+, logosQtSdk
+, logosProtocol
 , testFramework
 , moduleDeps ? {}
 , mockCLibs ? []
@@ -61,11 +63,15 @@ in pkgs.stdenv.mkDerivation {
     qt6.qtbase
     qt6.qtremoteobjects
     logosSdk
+    logosQtSdk
+    logosProtocol
     testFramework
   ];
 
   cmakeFlags = [
     "-DLOGOS_CPP_SDK_ROOT=${logosSdk}"
+    "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
+    "-DLOGOS_PROTOCOL_ROOT=${logosProtocol}"
     "-DLOGOS_TEST_FRAMEWORK_ROOT=${testFramework}"
   ] ++ extraCmakeFlags;
 
