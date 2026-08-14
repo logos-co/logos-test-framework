@@ -9,6 +9,19 @@
       inputs.logos-nix.follows = "logos-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # The Qt HOST RUNTIME a module test links: LogosAPI, LogosAPIProvider and
+    # the provider bases, shipped as `logos-qt-host`. It used to come from
+    # logos-qt-sdk; LogosTest.cmake now names logos-qt-host::logos_qt_host.
+    logos-plugin-qt = {
+      url = "github:logos-co/logos-plugin-qt";
+      inputs.logos-nix.follows = "logos-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.logos-protocol.follows = "logos-protocol";
+    };
+    # Still an input: logos-qt-sdk ships the Qt-typed consumer headers that are
+    # NOT part of the host runtime (logos_qt_lp_bridge.h, logos_qt_wire.h,
+    # logos_ui_plugin_context.h), and LogosTest.cmake keeps accepting
+    # LOGOS_QT_SDK_ROOT for callers that have not moved yet.
     logos-qt-sdk = {
       url = "github:logos-co/logos-qt-sdk";
       inputs.logos-nix.follows = "logos-nix";
@@ -19,7 +32,7 @@
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-qt-sdk, ... }:
+  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-plugin-qt, logos-qt-sdk, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
@@ -65,10 +78,44 @@
         }
       );
 
+      # Build the shipped examples through LogosTest.cmake. This is the only
+      # place the framework's own CMake gets exercised: every other consumer
+      # drives it from their repo, so without these a repoint of the host
+      # runtime would be unverifiable here.
+      #
+      # Both roots are covered on purpose. `example-tests` is the repointed
+      # path (logos-qt-host::logos_qt_host); `example-tests-qt-sdk` is the
+      # pre-split path callers still take until they pass LOGOS_QT_HOST_ROOT,
+      # and it is here so a change to the new path cannot quietly break it.
+      checks = forAllSystems ({ pkgs, system, ... }:
+        let
+          mkExampleTests = { name, logosQtHost ? null, logosQtSdk ? null }:
+            (import ./nix/mkLogosModuleTests.nix {
+              inherit pkgs logosQtHost logosQtSdk;
+              src = ./.;
+              testDir = ./examples/basic-module-test;
+              logosSdk = logos-cpp-sdk.packages.${system}.default;
+              logosProtocol = logos-protocol.packages.${system}.default;
+              testFramework = self.packages.${system}.default;
+            }).overrideAttrs (_: { pname = name; });
+        in {
+          example-tests = mkExampleTests {
+            name = "logos-test-framework-example-tests";
+            logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
+          };
+
+          example-tests-qt-sdk = mkExampleTests {
+            name = "logos-test-framework-example-tests-qt-sdk";
+            logosQtSdk = logos-qt-sdk.packages.${system}.default;
+          };
+        }
+      );
+
       # Development shell for working on the framework
       devShells = forAllSystems ({ pkgs, system, ... }:
         let
           logosSdk = logos-cpp-sdk.packages.${system}.default;
+          logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
           logosQtSdk = logos-qt-sdk.packages.${system}.default;
           logosProtocol = logos-protocol.packages.${system}.default;
         in {
@@ -82,11 +129,13 @@
               qt6.qtbase
               qt6.qtremoteobjects
               logosSdk
+              logosQtHost
               logosQtSdk
               logosProtocol
             ];
             shellHook = ''
               export LOGOS_CPP_SDK_ROOT="${logosSdk}"
+              export LOGOS_QT_HOST_ROOT="${logosQtHost}"
               export LOGOS_QT_SDK_ROOT="${logosQtSdk}"
               export LOGOS_PROTOCOL_ROOT="${logosProtocol}"
               export LOGOS_TEST_FRAMEWORK_ROOT="${./.}"
