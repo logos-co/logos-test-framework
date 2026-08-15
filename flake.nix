@@ -80,16 +80,16 @@
 
       # Build the shipped examples through LogosTest.cmake. This is the only
       # place the framework's own CMake gets exercised: every other consumer
-      # drives it from their repo, so without these a repoint of the host
+      # drives it from their repo, so without this a repoint of the host
       # runtime would be unverifiable here.
       #
-      # Both roots are covered on purpose. `example-tests` is the repointed
-      # path (logos-qt-host::logos_qt_host); `example-tests-qt-sdk` is the
-      # pre-split path callers still take until they pass LOGOS_QT_HOST_ROOT,
-      # and it is here so a change to the new path cannot quietly break it.
+      # There used to be a second check, `example-tests-qt-sdk`, covering the
+      # pre-split path where LOGOS_QT_SDK_ROOT alone supplied the host runtime.
+      # logos-qt-sdk no longer carries those headers, so that path does not
+      # exist to be covered — LogosTest.cmake now demands LOGOS_QT_HOST_ROOT.
       checks = forAllSystems ({ pkgs, system, ... }:
         let
-          mkExampleTests = { name, logosQtHost ? null, logosQtSdk ? null }:
+          mkExampleTests = { name, logosQtHost, logosQtSdk ? null }:
             (import ./nix/mkLogosModuleTests.nix {
               inherit pkgs logosQtHost logosQtSdk;
               src = ./.;
@@ -102,10 +102,6 @@
           example-tests = mkExampleTests {
             name = "logos-test-framework-example-tests";
             logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
-          };
-
-          example-tests-qt-sdk = mkExampleTests {
-            name = "logos-test-framework-example-tests-qt-sdk";
             logosQtSdk = logos-qt-sdk.packages.${system}.default;
           };
         }

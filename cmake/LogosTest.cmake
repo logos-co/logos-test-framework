@@ -81,13 +81,13 @@ function(logos_test)
     # layer (transports, consumer core, mock implementations).
     #
     # The Qt host runtime is owned by logos-plugin-qt and ships as the
-    # `logos-qt-host` CMake package (LOGOS_QT_HOST_ROOT). logos-qt-sdk shipped
-    # the same code before the split and still forwards it, so LOGOS_QT_SDK_ROOT
-    # remains accepted while callers migrate — but LOGOS_QT_HOST_ROOT wins when
-    # both are given. Note logos-qt-sdk ALSO ships Qt-typed consumer headers
-    # that are not part of the host runtime (logos_qt_lp_bridge.h,
-    # logos_qt_wire.h, logos_ui_plugin_context.h); those keep coming from
-    # LOGOS_QT_SDK_ROOT when a caller supplies it, see below.
+    # `logos-qt-host` CMake package (LOGOS_QT_HOST_ROOT). LOGOS_QT_SDK_ROOT is
+    # NOT an alternative for it: logos-qt-sdk forwarded the same headers during
+    # the migration and no longer does, so a root that used to work would now
+    # configure cleanly and then fail deep in the compile with "logos_api.h: No
+    # such file". LOGOS_QT_SDK_ROOT still means exactly one thing here — the
+    # Qt-typed consumer headers logos-qt-sdk owns (logos_qt_lp_bridge.h,
+    # logos_qt_wire.h, logos_ui_plugin_context.h), added below and optional.
 
     if(NOT DEFINED LOGOS_CPP_SDK_ROOT)
         if(DEFINED ENV{LOGOS_CPP_SDK_ROOT})
@@ -104,24 +104,19 @@ function(logos_test)
         set(LOGOS_QT_SDK_ROOT "$ENV{LOGOS_QT_SDK_ROOT}")
     endif()
 
-    # Pick the root the host runtime is taken from, and the CMake package /
-    # target that go with it. There is deliberately no third branch: a build
-    # that cannot name a host runtime must stop here rather than carry on
-    # without one.
-    if(DEFINED LOGOS_QT_HOST_ROOT)
-        set(QT_HOST_ROOT "${LOGOS_QT_HOST_ROOT}")
-        set(QT_HOST_PACKAGE logos-qt-host)
-        set(QT_HOST_TARGET logos-qt-host::logos_qt_host)
-    elseif(DEFINED LOGOS_QT_SDK_ROOT)
-        set(QT_HOST_ROOT "${LOGOS_QT_SDK_ROOT}")
-        set(QT_HOST_PACKAGE logos-qt-sdk)
-        set(QT_HOST_TARGET logos-qt-sdk::logos_qt_sdk)
-    else()
-        message(FATAL_ERROR "Neither LOGOS_QT_HOST_ROOT nor LOGOS_QT_SDK_ROOT is set. "
-                            "Set LOGOS_QT_HOST_ROOT to an installed logos-qt-host prefix "
-                            "(or a logos-plugin-qt checkout) via environment or CMake "
-                            "variable.")
+    # The root the host runtime is taken from, and the CMake package / target
+    # that go with it. There is exactly one source for it: a build that cannot
+    # name a host runtime must stop here rather than carry on without one.
+    if(NOT DEFINED LOGOS_QT_HOST_ROOT)
+        message(FATAL_ERROR "LOGOS_QT_HOST_ROOT is not set. Set it to an installed "
+                            "logos-qt-host prefix (or a logos-plugin-qt checkout) via "
+                            "environment or CMake variable. LOGOS_QT_SDK_ROOT is not a "
+                            "substitute: logos-qt-sdk no longer carries the host "
+                            "runtime's headers.")
     endif()
+    set(QT_HOST_ROOT "${LOGOS_QT_HOST_ROOT}")
+    set(QT_HOST_PACKAGE logos-qt-host)
+    set(QT_HOST_TARGET logos-qt-host::logos_qt_host)
 
     if(NOT DEFINED LOGOS_PROTOCOL_ROOT)
         if(DEFINED ENV{LOGOS_PROTOCOL_ROOT})
@@ -241,15 +236,16 @@ function(logos_test)
         ${PROTOCOL_IMPL_INCLUDE}/qt_remote
     )
 
-    # logos-qt-sdk also ships Qt-typed headers that are NOT part of the host
-    # runtime — logos_qt_lp_bridge.h / logos_qt_wire.h (emitted #includes in
-    # generated Qt consumer wrappers) and logos_ui_plugin_context.h. When a
-    # caller supplies both roots, keep those reachable, but AFTER the host
-    # runtime's include dir so the host headers win the five names they share.
+    # The Qt-typed headers logos-qt-sdk owns — logos_qt_lp_bridge.h /
+    # logos_qt_wire.h (emitted #includes in generated Qt consumer wrappers) and
+    # logos_ui_plugin_context.h. The two roots no longer share a single header
+    # name, so ordering against the host runtime's include dir does not matter
+    # any more; what does matter is probing for a file this SDK actually owns,
+    # since logos_api.h is gone from both of its layouts.
     if(DEFINED LOGOS_QT_SDK_ROOT AND NOT "${LOGOS_QT_SDK_ROOT}" STREQUAL "${QT_HOST_ROOT}")
-        if(EXISTS "${LOGOS_QT_SDK_ROOT}/cpp/logos_api.h")
+        if(EXISTS "${LOGOS_QT_SDK_ROOT}/cpp/logos_qt_wire.h")
             target_include_directories(${LT_NAME} PRIVATE "${LOGOS_QT_SDK_ROOT}/cpp")
-        elseif(EXISTS "${LOGOS_QT_SDK_ROOT}/include/cpp")
+        elseif(EXISTS "${LOGOS_QT_SDK_ROOT}/include/cpp/logos_qt_wire.h")
             target_include_directories(${LT_NAME} PRIVATE "${LOGOS_QT_SDK_ROOT}/include/cpp")
         endif()
     endif()

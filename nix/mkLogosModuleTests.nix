@@ -25,10 +25,12 @@
 , testDir
 , configFile ? null
 , logosSdk
-  # The Qt host runtime (logos-plugin-qt's `logos-qt-host`). Preferred.
-, logosQtHost ? null
-  # Pre-split home of the same runtime. Still accepted so callers that have not
-  # moved keep building; logosQtHost wins when both are given.
+  # The Qt host runtime (logos-plugin-qt's `logos-qt-host`). Required.
+, logosQtHost
+  # logos-qt-sdk, for the Qt-typed consumer headers it owns (logos_qt_wire.h,
+  # logos_qt_lp_bridge.h, logos_ui_plugin_context.h). NOT a source of the host
+  # runtime — it stopped re-exporting those headers when the consumers were
+  # repointed — so it is genuinely optional here.
 , logosQtSdk ? null
 , logosProtocol
 , testFramework
@@ -53,16 +55,10 @@ let
     '' else ""
   ) (lib.attrNames moduleDeps);
 
-  # LogosTest.cmake refuses to configure without a host runtime; say so here,
-  # where the caller can see which argument is missing.
-  qtLayerRoots = lib.optional (logosQtHost != null) logosQtHost
+  qtLayerRoots = [ logosQtHost ]
               ++ lib.optional (logosQtSdk != null) logosQtSdk;
 
 in
-assert lib.assertMsg (qtLayerRoots != [])
-  ("mkLogosModuleTests: pass logosQtHost (logos-plugin-qt's logos-qt-host "
-   + "package) — or, for the pre-split layout, logosQtSdk.");
-
 pkgs.stdenv.mkDerivation {
   pname = "logos-module-tests";
   version = "0.0.1";
@@ -92,7 +88,7 @@ pkgs.stdenv.mkDerivation {
     # `logos_test` command, never reaching any of the roots above.
     "-DCMAKE_MODULE_PATH=${testFramework}/cmake"
   ]
-  ++ lib.optional (logosQtHost != null) "-DLOGOS_QT_HOST_ROOT=${logosQtHost}"
+  ++ [ "-DLOGOS_QT_HOST_ROOT=${logosQtHost}" ]
   ++ lib.optional (logosQtSdk != null) "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
   ++ extraCmakeFlags;
 
