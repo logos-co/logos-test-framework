@@ -1,19 +1,38 @@
 {
   description = "Logos Test Framework — unit testing for Logos modules without Qt boilerplate";
 
+  # Four of the five inputs below are rev-pinned rather than master-tracking.
+  # The Qt host split (B1–B4) lives on branches: the `logos-qt-host` package
+  # this repo's LogosTest.cmake links does not exist on logos-plugin-qt's
+  # master, logos-qt-sdk's master still re-exports the host headers this repo
+  # stopped taking from it, and both need TokenManager::forIdentity from
+  # logos-protocol's feat/per-client-token-store. An unpinned url would lock
+  # onto masters that do not evaluate (missing package) or do not compile.
+  # Re-point every one of them at master once the chain merges.
   inputs = {
     logos-nix.url = "github:logos-co/logos-nix";
-    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
+    # a04b2788 is the tip of logos-cpp-sdk's feat/sdk-codegen-b3-d11, a
+    # fast-forward from that repo's master (contains e3744fb8).
+    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk/a04b27888e1d126578f639ed46dae0c777990a10";
+    # c8bab12 is the tip of feat/per-client-token-store, a fast-forward from
+    # protocol master (contains e6d5b57). logos-plugin-qt, logos-qt-sdk and
+    # logos-cpp-sdk all pin this same rev, so the closure holds one protocol.
     logos-protocol = {
-      url = "github:logos-co/logos-protocol";
+      url = "github:logos-co/logos-protocol/c8bab12834dbf92155b483546875e6078d17c74e";
       inputs.logos-nix.follows = "logos-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     # The Qt HOST RUNTIME a module test links: LogosAPI, LogosAPIProvider and
     # the provider bases, shipped as `logos-qt-host`. It used to come from
     # logos-qt-sdk; LogosTest.cmake now names logos-qt-host::logos_qt_host.
+    #
+    # cc24fa1 is the tip of feat/b4-qt-host-windows-target, rebased onto
+    # plugin-qt master (8846fc5 is an ancestor of it). It replaces the previous
+    # 8ccb1fc pin, which is a stale commit on feat/sdk-codegen-b3-d11 and is an
+    # ancestor of NEITHER b4 branch. It must stay the same rev logos-qt-sdk
+    # pins below, or the example tests would link two different qt-host copies.
     logos-plugin-qt = {
-      url = "github:logos-co/logos-plugin-qt";
+      url = "github:logos-co/logos-plugin-qt/cc24fa1c0c43b2d96c1dc165ee545a0321318b59";
       inputs.logos-nix.follows = "logos-nix";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.logos-protocol.follows = "logos-protocol";
@@ -22,8 +41,12 @@
     # NOT part of the host runtime (logos_qt_lp_bridge.h, logos_qt_wire.h,
     # logos_ui_plugin_context.h), and LogosTest.cmake keeps accepting
     # LOGOS_QT_SDK_ROOT for callers that have not moved yet.
+    #
+    # 8a06b870 is the tip of feat/sdk-codegen-b3-d11, a fast-forward from
+    # qt-sdk master (contains c6be61d). Its master still carries the forwarding
+    # headers this repo's LOGOS_QT_SDK_ROOT block no longer expects to find.
     logos-qt-sdk = {
-      url = "github:logos-co/logos-qt-sdk";
+      url = "github:logos-co/logos-qt-sdk/8a06b870e59afca3392de2bddf8eec5fe3b85225";
       inputs.logos-nix.follows = "logos-nix";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.logos-protocol.follows = "logos-protocol";
