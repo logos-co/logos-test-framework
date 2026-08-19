@@ -243,6 +243,11 @@ checks.${system}.unit-tests = logos-test-framework.lib.mkLogosModuleTests {
   testDir = ./tests;
   configFile = ./metadata.json;
   logosSdk = logos-cpp-sdk.packages.${system}.default;
+  # The Qt host runtime a module test links (LogosAPI, LogosAPIProvider, the
+  # provider bases). It lives in logos-plugin-qt; `logosQtSdk` is still
+  # accepted for the pre-split layout, and `logosQtHost` wins if both are set.
+  logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
+  logosProtocol = logos-protocol.packages.${system}.default;
   testFramework = logos-test-framework.packages.${system}.default;
 };
 ```

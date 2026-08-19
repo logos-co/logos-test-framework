@@ -12,6 +12,8 @@
 #     testDir = ./tests;
 #     configFile = ./metadata.json;
 #     logosSdk = logos-cpp-sdk.packages.${system}.default;
+#     logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
+#     logosProtocol = logos-protocol.packages.${system}.default;
 #     testFramework = logos-test-framework.packages.${system}.default;
 #     moduleDeps = { test_basic_module = inputs.test_basic_module.packages.${system}.default; };
 #     mockCLibs = [ "gowalletsdk" ];    # optional
@@ -23,7 +25,13 @@
 , testDir
 , configFile ? null
 , logosSdk
-, logosQtSdk
+  # The Qt host runtime (logos-plugin-qt's `logos-qt-host`). Required.
+, logosQtHost
+  # logos-qt-sdk, for the Qt-typed consumer headers it owns (logos_qt_wire.h,
+  # logos_qt_lp_bridge.h, logos_ui_plugin_context.h). NOT a source of the host
+  # runtime — it stopped re-exporting those headers when the consumers were
+  # repointed — so it is genuinely optional here.
+, logosQtSdk ? null
 , logosProtocol
 , testFramework
 , moduleDeps ? {}
@@ -47,7 +55,11 @@ let
     '' else ""
   ) (lib.attrNames moduleDeps);
 
-in pkgs.stdenv.mkDerivation {
+  qtLayerRoots = [ logosQtHost ]
+              ++ lib.optional (logosQtSdk != null) logosQtSdk;
+
+in
+pkgs.stdenv.mkDerivation {
   pname = "logos-module-tests";
   version = "0.0.1";
 
@@ -63,17 +75,22 @@ in pkgs.stdenv.mkDerivation {
     qt6.qtbase
     qt6.qtremoteobjects
     logosSdk
-    logosQtSdk
     logosProtocol
     testFramework
-  ];
+  ] ++ qtLayerRoots;
 
   cmakeFlags = [
     "-DLOGOS_CPP_SDK_ROOT=${logosSdk}"
-    "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
     "-DLOGOS_PROTOCOL_ROOT=${logosProtocol}"
     "-DLOGOS_TEST_FRAMEWORK_ROOT=${testFramework}"
-  ] ++ extraCmakeFlags;
+    # A test CMakeLists starts with `include(LogosTest)`, which resolves off
+    # CMAKE_MODULE_PATH. Without this the configure fails on an unknown
+    # `logos_test` command, never reaching any of the roots above.
+    "-DCMAKE_MODULE_PATH=${testFramework}/cmake"
+  ]
+  ++ [ "-DLOGOS_QT_HOST_ROOT=${logosQtHost}" ]
+  ++ lib.optional (logosQtSdk != null) "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
+  ++ extraCmakeFlags;
 
   # Build from the test directory
   cmakeDir = toString testDir;
@@ -101,23 +118,35 @@ in pkgs.stdenv.mkDerivation {
     cmake --build . --parallel $NIX_BUILD_CORES
   '';
 
-  # Run the tests and store the result
   installPhase = ''
     mkdir -p $out/bin
 
-    # Find and copy test binary
-    find . -maxdepth 2 -type f -executable -name "*_tests" | head -1 | while read bin; do
+    find . -maxdepth 2 -type f -executable \( -name "*_tests" -o -name "*_test" \) | while read bin; do
       cp "$bin" $out/bin/
     done
-
-    # Also try CTest
-    ctest --output-on-failure --timeout 60 || true
   '';
 
-  # Run tests as a check
+  # Run tests as a check.
+  #
+  # The binaries are located and executed directly rather than through ctest.
+  # `ctest` reports "No tests were found!!!" and exits 0, so a test project
+  # that registered nothing — a real outcome here — produced a green check
+  # that ran no tests at all. Finding zero binaries is now a hard failure.
   doCheck = true;
   checkPhase = ''
+    runHook preCheck
+
     echo "Running module unit tests..."
-    ctest --output-on-failure --timeout 60
+    testBins=$(find . -maxdepth 2 -type f -executable \( -name "*_tests" -o -name "*_test" \) | sort)
+    if [ -z "$testBins" ]; then
+      echo "ERROR: no test executable was built (looked for *_tests / *_test)" >&2
+      exit 1
+    fi
+    for bin in $testBins; do
+      echo "Executing: $bin"
+      "$bin"
+    done
+
+    runHook postCheck
   '';
 }
