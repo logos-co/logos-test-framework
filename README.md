@@ -7,6 +7,7 @@ Unit testing framework for Logos modules. Supports mocking calls to other module
 - **Module mocking** — mock calls to other Logos modules with a fluent API
 - **C library mocking** — link-time substitution for external C/C++ libraries
 - **Event testing** — capture and assert on events emitted by the module
+- **CallCaller** — RAII stand-in for RPC caller identity (`logos::CallCaller::module("name")`) so unit tests that construct an impl directly see the same `logos::currentCaller()` as a real dispatch
 - **Color terminal output** — auto-detects TTY, clean pass/fail formatting
 - **JSON output** — `--json` flag for CI and agent consumption
 - **Test filtering** — `--filter <pattern>` to run a subset of tests
