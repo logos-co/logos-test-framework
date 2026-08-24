@@ -6,7 +6,8 @@
  * @brief Logos Module Test Framework — write unit tests without Qt boilerplate.
  *
  * Single include for the full test API: runner, assertions, module mocking,
- * C library mocking, and event testing.
+ * C library mocking, event testing, and CallCaller (in-process stand-in for
+ * the generated logos_module_set_call_caller() push).
  *
  *   #include <logos_test.h>
  *
@@ -238,11 +239,6 @@ private:
 #include "logos_test_context.h"
 #include "logos_clib_mock.h"
 #include "logos_test_events.h"
-
-// logos::CallCaller — the dispatch stand-in for logos_module_set_call_caller.
-// Module unit tests that construct an impl directly wrap handler calls with
-// CallCaller::module(name) / CallCaller::host() so currentCaller() matches
-// production RPC. Included here so every module test binary sees it.
-#include <logos_caller.h>
+#include "logos_test_caller.h"
 
 #endif // LOGOS_TEST_H
