@@ -239,4 +239,10 @@ private:
 #include "logos_clib_mock.h"
 #include "logos_test_events.h"
 
+// logos::CallCaller — the dispatch stand-in for logos_module_set_call_caller.
+// Module unit tests that construct an impl directly wrap handler calls with
+// CallCaller::module(name) / CallCaller::host() so currentCaller() matches
+// production RPC. Included here so every module test binary sees it.
+#include <logos_caller.h>
+
 #endif // LOGOS_TEST_H
