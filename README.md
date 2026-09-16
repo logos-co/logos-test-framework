@@ -241,7 +241,7 @@ If your project doesn't use `logos-module-builder`, you can use the framework di
 checks.${system}.unit-tests = logos-test-framework.lib.mkLogosModuleTests {
   inherit pkgs;
   src = ./.;
-  testDir = ./tests;
+  testDir = ./tests;                # a directory inside src
   configFile = ./metadata.json;
   logosSdk = logos-cpp-sdk.packages.${system}.default;
   # The Qt host runtime a module test links (LogosAPI, LogosAPIProvider, the

@@ -9,7 +9,7 @@
 #   checks.${system}.unit-tests = logos-test-framework.lib.mkLogosModuleTests {
 #     inherit pkgs;
 #     src = ./.;
-#     testDir = ./tests;
+#     testDir = ./tests;                # a directory inside src
 #     configFile = ./metadata.json;
 #     logosSdk = logos-cpp-sdk.packages.${system}.default;
 #     logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
@@ -92,8 +92,9 @@ pkgs.stdenv.mkDerivation {
   ++ lib.optional (logosQtSdk != null) "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
   ++ extraCmakeFlags;
 
-  # Build from the test directory
-  cmakeDir = toString testDir;
+  # testDir inside the unpacked src: `toString testDir` is a store path with no
+  # string context, so the Linux sandbox does not contain it.
+  cmakeDir = "../" + lib.removePrefix "./" (lib.path.removePrefix (src.origSrc or src) testDir);
 
   preConfigure = ''
     # Set up generated code directory
