@@ -96,11 +96,56 @@
               logosProtocol = logos-protocol.packages.${system}.default;
               testFramework = self.packages.${system}.default;
             }).overrideAttrs (_: { pname = name; });
+
+          # A package-shaped library: lib/libextfixture.a, include/extfixture/.
+          extfixture = pkgs.runCommandCC "extfixture" { } ''
+            mkdir -p $out/lib $out/include/extfixture
+            cat > $out/include/extfixture/extfixture.h <<'EOF'
+            #pragma once
+            #ifdef __cplusplus
+            extern "C" {
+            #endif
+            int extfixture_answer(void);
+            #ifdef __cplusplus
+            }
+            #endif
+            EOF
+            echo 'int extfixture_answer(void) { return 42; }' > extfixture.c
+            $CC -c -fPIC extfixture.c -o extfixture.o
+            $AR rcs $out/lib/libextfixture.a extfixture.o
+          '';
+
+          # logos_test(EXTERNAL_LIBS) from each place it looks.
+          mkExternalLibTests = { name, preConfigure }:
+            (import ./nix/mkLogosModuleTests.nix {
+              inherit pkgs preConfigure;
+              src = ./.;
+              testDir = ./examples/extlib-link-test;
+              logosSdk = logos-cpp-sdk.packages.${system}.default;
+              logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
+              logosQtSdk = logos-qt-sdk.packages.${system}.default;
+              logosProtocol = logos-protocol.packages.${system}.default;
+              testFramework = self.packages.${system}.default;
+            }).overrideAttrs (_: { pname = name; });
         in {
           example-tests = mkExampleTests {
             name = "logos-test-framework-example-tests";
             logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
             logosQtSdk = logos-qt-sdk.packages.${system}.default;
+          };
+
+          external-libs-root = mkExternalLibTests {
+            name = "logos-test-framework-external-libs-root";
+            preConfigure = "export LOGOS_EXT_ROOT_EXTFIXTURE=${extfixture}";
+          };
+
+          # The module builders stage lib/* and include/* into one directory.
+          external-libs-staged = mkExternalLibTests {
+            name = "logos-test-framework-external-libs-staged";
+            preConfigure = ''
+              mkdir -p examples/lib
+              cp -r ${extfixture}/lib/* ${extfixture}/include/* examples/lib/
+            '';
           };
         }
       );

@@ -33,3 +33,9 @@ jobs:
 
       - name: Example module tests
         run: nix build '.#checks.x86_64-linux.example-tests' -L
+
+      - name: External library from LOGOS_EXT_ROOT_<NAME>
+        run: nix build '.#checks.x86_64-linux.external-libs-root' -L
+
+      - name: External library from the staged ../lib
+        run: nix build '.#checks.x86_64-linux.external-libs-staged' -L
