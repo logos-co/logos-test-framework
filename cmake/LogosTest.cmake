@@ -16,6 +16,8 @@
 #           mocks/mock_libcalc.cpp
 #       EXTRA_INCLUDES                    # optional: additional include dirs
 #           ../lib
+#       EXTERNAL_LIBS                     # optional: real (unmocked) C/C++ libs
+#           calc
 #       GENERATED_SOURCES                 # optional: generated dispatch code
 #           ../logos_provider_dispatch.cpp
 #       GENERATED_DIR                     # optional: generated code dir
@@ -45,6 +47,10 @@ Optional:
   GENERATED_SOURCES  - Generated code files (logos_provider_dispatch.cpp, etc.)
   GENERATED_DIR      - Directory containing generated code (logos_sdk.cpp, etc.)
   EXTRA_LINK_LIBS    - Additional libraries to link
+  EXTERNAL_LIBS      - External library names (metadata nix.external_libraries),
+                       found as logos_module() finds them: in
+                       $LOGOS_EXT_ROOT_<NAME>/{lib,include} when set, else in
+                       the module's staged ../lib
   LINK_GO_STATIC_ARCHIVE - Absolute path to a Go c-archive (.a); links with
                            whole-archive / -force_load (see LogosModule.cmake)
 #]=======================================================================]
@@ -53,7 +59,7 @@ function(logos_test)
     # merging all args into LT_NAME. Read from ARGV starting at index 0 instead.
     cmake_parse_arguments(PARSE_ARGV 0 LT ""
         "NAME;GENERATED_DIR;LINK_GO_STATIC_ARCHIVE"
-        "MODULE_SOURCES;TEST_SOURCES;MOCK_C_SOURCES;EXTRA_INCLUDES;GENERATED_SOURCES;EXTRA_LINK_LIBS")
+        "MODULE_SOURCES;TEST_SOURCES;MOCK_C_SOURCES;EXTRA_INCLUDES;GENERATED_SOURCES;EXTRA_LINK_LIBS;EXTERNAL_LIBS")
 
     if(NOT LT_NAME)
         message(FATAL_ERROR "logos_test: NAME is required")
@@ -316,6 +322,30 @@ function(logos_test)
     # Extra link libraries
     foreach(lib ${LT_EXTRA_LINK_LIBS})
         target_link_libraries(${LT_NAME} PRIVATE ${lib})
+    endforeach()
+
+    # External libraries: the package root logos_module() would use, or the
+    # module's staged lib/ (libraries and headers in one directory).
+    foreach(ext_lib ${LT_EXTERNAL_LIBS})
+        string(TOUPPER "${ext_lib}" _ext_upper)
+        if(DEFINED ENV{LOGOS_EXT_ROOT_${_ext_upper}})
+            set(_ext_lib_dir "$ENV{LOGOS_EXT_ROOT_${_ext_upper}}/lib")
+            set(_ext_include_dir "$ENV{LOGOS_EXT_ROOT_${_ext_upper}}/include")
+        else()
+            set(_ext_lib_dir "${CMAKE_CURRENT_SOURCE_DIR}/../lib")
+            set(_ext_include_dir "${_ext_lib_dir}")
+        endif()
+        find_library(LOGOS_TEST_EXT_${ext_lib}_PATH
+            NAMES lib${ext_lib}.dylib lib${ext_lib}.so ${ext_lib}.dylib ${ext_lib}.so
+                  lib${ext_lib}.a ${ext_lib}.a
+            PATHS "${_ext_lib_dir}" NO_DEFAULT_PATH)
+        if(NOT LOGOS_TEST_EXT_${ext_lib}_PATH)
+            message(FATAL_ERROR "logos_test: external library '${ext_lib}' was not found "
+                                "in ${_ext_lib_dir}. Mock it with MOCK_C_SOURCES instead, "
+                                "or stage it (mkLogosModuleTests externalLibInputs).")
+        endif()
+        target_include_directories(${LT_NAME} PRIVATE "${_ext_include_dir}")
+        target_link_libraries(${LT_NAME} PRIVATE "${LOGOS_TEST_EXT_${ext_lib}_PATH}")
     endforeach()
 
     if(LT_LINK_GO_STATIC_ARCHIVE)

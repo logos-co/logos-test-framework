@@ -5,7 +5,7 @@ Unit testing framework for Logos modules. Supports mocking calls to other module
 ## Features
 
 - **Module mocking** — mock calls to other Logos modules with a fluent API
-- **C library mocking** — link-time substitution for external C/C++ libraries
+- **C library mocking** — link-time substitution for external C/C++ libraries, or `EXTERNAL_LIBS` to link the real ones
 - **Event testing** — capture and assert on events emitted by the module
 - **CallCaller** — RAII stand-in for RPC caller identity (`logos::CallCaller::module("name")`) so unit tests that construct an impl directly see the same `logos::currentCaller()` as a real dispatch
 - **Color terminal output** — auto-detects TTY, clean pass/fail formatting
@@ -174,6 +174,30 @@ LOGOS_TEST(add_returns_mocked_value) {
     LOGOS_ASSERT(t.cFunctionCalled("calc_add"));
 }
 ```
+
+## Linking Real C Libraries
+
+To test against the real library instead of a mock, name it in `EXTERNAL_LIBS`
+(the same name as in `metadata.json` `nix.external_libraries`):
+
+```cmake
+logos_test(
+    NAME calc_module_tests
+    MODULE_SOURCES ../src/calc_module_impl.cpp
+    TEST_SOURCES main.cpp test_calc.cpp
+    EXTERNAL_LIBS calc
+)
+```
+
+`logos_test()` looks for the library where `logos_module()` does:
+
+- if `LOGOS_EXT_ROOT_CALC` is set, in `$LOGOS_EXT_ROOT_CALC/lib`, with headers
+  from `$LOGOS_EXT_ROOT_CALC/include`;
+- otherwise in the module's `../lib`, where logos-module-builder stages each
+  library's `lib/` and `include/` contents for the test build.
+
+It prefers a shared library to a static archive. If the library is missing,
+configuration fails.
 
 ## Event Testing
 
